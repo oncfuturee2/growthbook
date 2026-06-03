@@ -34,4 +34,17 @@ router.delete(
   tagController.deleteTag,
 );
 
+router.put(
+  "/color",
+  validateRequestMiddleware({
+    body: z
+      .object({
+        tags: z.array(z.string()),
+        color: z.string(),
+      })
+      .strict(),
+  }),
+  tagController.putTagColor,
+);
+
 export { router as tagRouter };
