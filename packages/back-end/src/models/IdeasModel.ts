@@ -5,6 +5,7 @@ const ideaSchema = new mongoose.Schema({
   id: String,
   text: String,
   archived: Boolean,
+  deleted: { type: Boolean, default: false },
   details: String,
   userId: String,
   userName: String,

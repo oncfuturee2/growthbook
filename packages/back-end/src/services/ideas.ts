@@ -7,6 +7,7 @@ import { addTags } from "back-end/src/models/TagModel";
 export function getIdeasByOrganization(organization: string, project?: string) {
   const query: FilterQuery<IdeaDocument> = {
     organization,
+    deleted: { $ne: true },
   };
 
   if (project) {
@@ -17,13 +18,16 @@ export function getIdeasByOrganization(organization: string, project?: string) {
 }
 
 export function getIdeasByQuery(query: FilterQuery<IdeaDocument>) {
-  return IdeaModel.find(query);
+  return IdeaModel.find({
+    ...query,
+    deleted: { $ne: true },
+  });
 }
 
 export async function createIdea(data: Partial<IdeaInterface>) {
   const idea = await IdeaModel.create({
     // Default values that can be overridden
-
+    deleted: false,
     // The data object passed in
     ...data,
     // Values that cannot be overridden
@@ -42,12 +46,14 @@ export async function createIdea(data: Partial<IdeaInterface>) {
 export function getIdeaById(id: string) {
   return IdeaModel.findOne({
     id,
+    deleted: { $ne: true },
   });
 }
 
 export function getIdeasByIds(ids: string[]) {
   return IdeaModel.find({
     id: { $in: ids },
+    deleted: { $ne: true },
   });
 }
 
@@ -58,11 +64,16 @@ export function getIdeasByExperimentIds(ids: string[]) {
   });
   return IdeaModel.find({
     evidence: { $in: tmp },
+    deleted: { $ne: true },
   });
 }
 
-export function deleteIdeaById(id: string) {
-  return IdeaModel.deleteOne({
-    id,
-  });
+export async function deleteIdeaById(id: string) {
+  return IdeaModel.updateOne(
+    { id },
+    {
+      deleted: true,
+      dateUpdated: new Date(),
+    }
+  );
 }
