@@ -21,8 +21,12 @@ module.exports = {
       script: "node_modules/next/dist/bin/next",
       args: "start",
       cwd: "./packages/front-end",
-      exec_mode: "fork",
-      instances: 1,
+      exec_mode: process.env.FRONTEND_EXEC_MODE || "fork",
+      instances: process.env.FRONTEND_INSTANCES
+        ? process.env.FRONTEND_INSTANCES === "max"
+          ? "max"
+          : parseInt(process.env.FRONTEND_INSTANCES, 10)
+        : 1,
       autorestart: process.env.PM2_AUTORESTART === "true",
       watch: false,
       max_memory_restart: process.env.PM2_MAX_MEMORY_RESTART || "6G",
