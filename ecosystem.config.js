@@ -1,3 +1,21 @@
+const resolveInstances = (value, fallback = 1) => {
+  if (value === "max") return "max";
+
+  const parsed = Number.parseInt(value || "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const resolveExecMode = (value, instances) => {
+  if (value === "cluster" || value === "fork") return value;
+  return instances === 1 ? "fork" : "cluster";
+};
+
+const frontEndInstances = resolveInstances(process.env.FRONTEND_INSTANCES);
+const frontEndExecMode = resolveExecMode(
+  process.env.FRONTEND_EXEC_MODE,
+  frontEndInstances,
+);
+
 module.exports = {
   apps: [
     {
@@ -21,13 +39,12 @@ module.exports = {
       script: "node_modules/next/dist/bin/next",
       args: "start",
       cwd: "./packages/front-end",
-      exec_mode: "fork",
-      instances: 1,
+      exec_mode: frontEndExecMode,
+      instances: frontEndInstances,
       autorestart: process.env.PM2_AUTORESTART === "true",
       watch: false,
       max_memory_restart: process.env.PM2_MAX_MEMORY_RESTART || "6G",
     },
-    // Idle monitor for preview environments - shuts down container after inactivity
     ...(process.env.PREVIEW_IDLE_TIMEOUT_SECONDS
       ? [
           {
