@@ -15,6 +15,8 @@ services:
       - mongo
     environment:
       - MONGODB_URI=mongodb://root:password@mongo:27017/growthbook?authSource=admin
+      - TRACING_PROVIDER=opentelemetry
+      - FRONTEND_INSTANCES=max
     volumes:
       - uploads:/usr/local/src/app/packages/back-end/uploads
 volumes:
