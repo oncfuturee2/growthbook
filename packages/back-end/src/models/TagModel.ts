@@ -119,3 +119,34 @@ export async function addTagsDiff(
     await addTags(organization, diff);
   }
 }
+
+export async function batchUpdateTagColor(
+  organization: string,
+  tagIds: string[],
+  color: string,
+) {
+  const doc = await TagModel.findOne({ organization });
+  if (!doc) return;
+
+  const settings = doc.settings || {};
+
+  tagIds.forEach((tagId) => {
+    if (settings[tagId]) {
+      settings[tagId] = {
+        ...settings[tagId],
+        color,
+      };
+    }
+  });
+
+  await TagModel.updateOne(
+    { organization },
+    {
+      $set: {
+        // Need to set the entire settings object, not just settings.{tag},
+        // since tags can contain dots in the name
+        settings,
+      },
+    },
+  );
+}
