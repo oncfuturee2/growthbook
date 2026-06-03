@@ -98,6 +98,42 @@ export async function addTag(
   );
 }
 
+export async function bulkUpdateTagColors(
+  organization: string,
+  tags: string[],
+  color: string,
+) {
+  if (!tags.length) return;
+
+  const existing = await TagModel.findOne({
+    organization,
+  });
+  if (!existing) return;
+
+  const json = existing.toJSON<TagDBInterface>();
+  const settings = { ...(json.settings || {}) };
+  const existingTags = new Set(json.tags || []);
+
+  for (const tag of new Set(tags)) {
+    if (!existingTags.has(tag)) {
+      continue;
+    }
+    settings[tag] = {
+      color,
+      description: settings[tag]?.description || "",
+    };
+  }
+
+  await TagModel.updateOne(
+    { organization },
+    {
+      $set: {
+        settings,
+      },
+    },
+  );
+}
+
 export async function removeTag(organization: string, tag: string) {
   await TagModel.updateOne(
     {

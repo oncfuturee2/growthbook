@@ -4,7 +4,11 @@ import { EventUserForResponseLocals } from "shared/types/events/event-types";
 import { AuthRequest } from "back-end/src/types/AuthRequest";
 import { ApiErrorResponse } from "back-end/types/api";
 import { getContextFromReq } from "back-end/src/services/organizations";
-import { addTag, removeTag } from "back-end/src/models/TagModel";
+import {
+  addTag,
+  bulkUpdateTagColors,
+  removeTag,
+} from "back-end/src/models/TagModel";
 import { removeTagInMetrics } from "back-end/src/models/MetricModel";
 import { removeTagInFeature } from "back-end/src/models/FeatureModel";
 import { removeTagFromSlackIntegration } from "back-end/src/models/SlackIntegrationModel";
@@ -43,6 +47,34 @@ export const postTag = async (
   });
 };
 
+type UpdateTagColorRequest = AuthRequest<{
+  tags: string[];
+  color: string;
+}>;
+
+type UpdateTagColorResponse = {
+  status: 200;
+};
+
+export const putTagColor = async (
+  req: UpdateTagColorRequest,
+  res: Response<UpdateTagColorResponse>,
+) => {
+  const context = getContextFromReq(req);
+
+  if (!context.permissions.canCreateAndUpdateTag()) {
+    context.permissions.throwPermissionError();
+  }
+
+  const { tags, color } = req.body;
+
+  await bulkUpdateTagColors(context.org.id, tags, color);
+
+  res.status(200).json({
+    status: 200,
+  });
+};
+
 // region DELETE /tag/:id
 
 type DeleteTagRequest = AuthRequest<{ id: string }, { id: string }>;
@@ -72,25 +104,19 @@ export const deleteTag = async (
   const { org } = context;
   const { id } = req.body;
 
-  // experiments
   await removeTagFromExperiments({
     context,
     tag: id,
   });
 
-  // metrics
   await removeTagInMetrics(org.id, id);
 
-  // features
   await removeTagInFeature(context, id);
 
-  // attributes
   await removeTagInAttribute(context, id);
 
-  // Slack integrations
   await removeTagFromSlackIntegration({ organizationId: org.id, tag: id });
 
-  // finally, remove the tag itself
   await removeTag(org.id, id);
 
   res.status(200).json({

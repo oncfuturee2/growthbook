@@ -22,6 +22,19 @@ router.post(
   tagController.postTag,
 );
 
+router.put(
+  "/color",
+  validateRequestMiddleware({
+    body: z
+      .object({
+        tags: z.array(z.string()).min(1),
+        color: z.string(),
+      })
+      .strict(),
+  }),
+  tagController.putTagColor,
+);
+
 router.delete(
   "/",
   validateRequestMiddleware({
