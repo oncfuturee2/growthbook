@@ -1,4 +1,4 @@
-import { applyEnvironmentInheritance } from "../../src/util/features";
+import { applyEnvironmentInheritance, applyNamespaceToPayload } from "../../src/util/features";
 
 describe("feature utils", () => {
   describe("applyEnvironmentInheritance", () => {
@@ -275,6 +275,190 @@ describe("feature utils", () => {
           { production: { enabled: true } },
         );
         expect(result.staging).toEqual({ enabled: true });
+      });
+    });
+  });
+
+  describe("applyNamespaceToPayload", () => {
+    describe("multiRange format", () => {
+      it("正确生成包含 attribute, seed, hashVersion 和 ranges 的 filters 数组", () => {
+        const rule = {};
+        const namespace = {
+          enabled: true,
+          name: "test-namespace",
+          ranges: [[0, 0.5]],
+          format: "multiRange",
+        };
+        const namespacesMap = new Map([
+          ["test-namespace", {
+            hashAttribute: "custom-id",
+            seed: "custom-seed",
+            format: "multiRange" as const
+          }]
+        ]);
+
+        applyNamespaceToPayload(rule as any, namespace as any, namespacesMap);
+
+        expect(rule).toEqual({
+          filters: [{
+            attribute: "custom-id",
+            seed: "custom-seed",
+            hashVersion: 2,
+            ranges: [[0, 0.5]]
+          }]
+        });
+      });
+
+      it("当缺失 namespace definition 时，正确回退并利用 isMultiRangeNamespaceFormat 判断结构", () => {
+        const rule = { hashAttribute: "rule-hash-id" };
+        const namespace = {
+          enabled: true,
+          name: "test-namespace",
+          ranges: [[0, 0.3], [0.6, 0.8]],
+          hashVersion: 3,
+          format: "multiRange",
+        };
+
+        applyNamespaceToPayload(rule as any, namespace as any);
+
+        expect(rule).toEqual({
+          hashAttribute: "rule-hash-id",
+          filters: [{
+            attribute: "rule-hash-id",
+            seed: "test-namespace",
+            hashVersion: 3,
+            ranges: [[0, 0.3], [0.6, 0.8]]
+          }]
+        });
+      });
+
+      it("保留 rule 上已有的 filters", () => {
+        const rule = {
+          filters: [{
+            attribute: "existing",
+            seed: "existing",
+            hashVersion: 1,
+            ranges: [[0, 1]]
+          }]
+        };
+        const namespace = {
+          enabled: true,
+          name: "test-namespace",
+          ranges: [[0, 0.5]],
+          format: "multiRange",
+        };
+
+        applyNamespaceToPayload(rule as any, namespace as any);
+
+        expect(rule).toEqual({
+          filters: [
+            {
+              attribute: "existing",
+              seed: "existing",
+              hashVersion: 1,
+              ranges: [[0, 1]]
+            },
+            {
+              attribute: "id",
+              seed: "test-namespace",
+              hashVersion: 2,
+              ranges: [[0, 0.5]]
+            }
+          ]
+        });
+      });
+    });
+
+    describe("legacy format", () => {
+      it("在 rule 对象上正确设置传统的 [name, start, end] 元组", () => {
+        const rule = {};
+        const namespace = {
+          enabled: true,
+          name: "legacy-namespace",
+          range: [0.2, 0.7],
+          format: "legacy" as const,
+        };
+
+        applyNamespaceToPayload(rule as any, namespace as any);
+
+        expect(rule).toEqual({
+          namespace: ["legacy-namespace", 0.2, 0.7]
+        });
+      });
+
+      it("当 namespace definition 明确格式为 legacy 时，使用传统格式", () => {
+        const rule = {};
+        const namespace = {
+          enabled: true,
+          name: "test-namespace",
+          ranges: [[0.3, 0.6]], // 尽管这里用的是 ranges，但定义里强制 legacy
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          ["test-namespace", { format: "legacy" as const }]
+        ]);
+
+        applyNamespaceToPayload(rule as any, namespace as any, namespacesMap);
+
+        expect(rule).toEqual({
+          namespace: ["test-namespace", 0.3, 0.6]
+        });
+      });
+    });
+
+    describe("防御性处理字符串范围值", () => {
+      it("对异常字符串格式（如 '0.5'）的 range 范围进行防御性数字转换", () => {
+        const rule = {};
+        const namespace = {
+          enabled: true,
+          name: "string-range-namespace",
+          // @ts-ignore 故意模拟字符串格式的范围
+          range: ["0.3", "0.7"],
+        };
+
+        applyNamespaceToPayload(rule as any, namespace as any);
+
+        expect(rule).toEqual({
+          namespace: ["string-range-namespace", 0.3, 0.7]
+        });
+      });
+
+      it("对 multiRange 格式中的字符串范围值进行防御性转换", () => {
+        const rule = {};
+        const namespace = {
+          enabled: true,
+          name: "string-ranges-namespace",
+          // @ts-ignore 故意模拟字符串格式的范围
+          ranges: [["0.1", "0.4"], ["0.6", "0.9"]],
+          format: "multiRange",
+        };
+
+        applyNamespaceToPayload(rule as any, namespace as any);
+
+        expect(rule).toEqual({
+          filters: [{
+            attribute: "id",
+            seed: "string-ranges-namespace",
+            hashVersion: 2,
+            ranges: [[0.1, 0.4], [0.6, 0.9]]
+          }]
+        });
+      });
+
+      it("对无效值（如 NaN）进行防御性处理，默认到 0", () => {
+        const rule = {};
+        const namespace = {
+          enabled: true,
+          name: "invalid-range-namespace",
+          // @ts-ignore 故意模拟无效的范围值
+          range: ["invalid", null],
+        };
+
+        applyNamespaceToPayload(rule as any, namespace as any);
+
+        expect(rule).toEqual({
+          namespace: ["invalid-range-namespace", 0, 0]
+        });
       });
     });
   });
