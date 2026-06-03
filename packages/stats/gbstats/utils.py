@@ -75,13 +75,18 @@ def check_srm(users: List[int], weights: List[float]) -> float:
 
     total_weight = sum(weights)
     x = 0
+    valid_variants = 0
     for i, o in enumerate(users):
         if weights[i] <= 0:
             continue
+        valid_variants += 1
         e = weights[i] / total_weight * total_observed
         x = x + ((o - e) ** 2) / e
 
-    return chi2.sf(x, len(users) - 1)  # type: ignore
+    if valid_variants < 2:
+        return 1.0
+
+    return float(chi2.sf(x, valid_variants - 1))  # type: ignore
 
 
 def gaussian_credible_interval(

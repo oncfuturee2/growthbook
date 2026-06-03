@@ -6,7 +6,7 @@ import numpy as np
 from scipy.stats import norm
 import copy
 
-from gbstats.utils import multinomial_covariance, truncated_normal_mean
+from gbstats.utils import multinomial_covariance, truncated_normal_mean, check_srm
 from scipy.stats import truncnorm
 
 DECIMALS = 5
@@ -69,3 +69,43 @@ class TestMultinomial(TestCase):
         v_theoretical = multinomial_covariance(self.nu)
         v_empirical = np.cov(data, rowvar=False, ddof=1)
         self.assertTrue(np.allclose(v_theoretical, v_empirical, atol=1e-3))
+
+
+class TestCheckSrm(TestCase):
+    def test_srm_no_observed(self):
+        self.assertEqual(check_srm([0, 0], [0.5, 0.5]), 1.0)
+
+    def test_srm_no_valid_variants(self):
+        self.assertEqual(check_srm([100, 100], [0.0, 0.0]), 1.0)
+
+    def test_srm_single_valid_variant(self):
+        self.assertEqual(check_srm([100, 50], [1.0, 0.0]), 1.0)
+        self.assertEqual(check_srm([100, 50], [0.0, 1.0]), 1.0)
+
+    def test_srm_normal_case(self):
+        # Perfect split
+        p_val = check_srm([500, 500], [0.5, 0.5])
+        self.assertAlmostEqual(p_val, 1.0, places=5)
+        
+        # Slightly off split
+        p_val2 = check_srm([520, 480], [0.5, 0.5])
+        self.assertLess(p_val2, 1.0)
+        self.assertGreater(p_val2, 0.05)
+        
+        # Very off split
+        p_val3 = check_srm([600, 400], [0.5, 0.5])
+        self.assertLess(p_val3, 0.05)
+
+    def test_srm_with_zero_weights(self):
+        # If the first two have weight 0.5, and the third has 0
+        # The DOF should be 2 - 1 = 1, not 3 - 1 = 2
+        # For a chi-squared with 1 DOF:
+        # x = (510-500)^2/500 + (490-500)^2/500 = 100/500 + 100/500 = 0.4
+        p_val = check_srm([510, 490, 0], [0.5, 0.5, 0.0])
+        from scipy.stats import chi2
+        expected_p_val = chi2.sf(0.4, 1)
+        self.assertAlmostEqual(p_val, expected_p_val, places=5)
+        
+        # Verify that it differs from what it would be with 2 DOF
+        expected_p_val_wrong = chi2.sf(0.4, 2)
+        self.assertNotAlmostEqual(p_val, expected_p_val_wrong, places=5)
