@@ -119,3 +119,37 @@ export async function addTagsDiff(
     await addTags(organization, diff);
   }
 }
+
+export async function batchUpdateTagColors(
+  organization: string,
+  tagIds: string[],
+  color: string,
+) {
+  const existing = await TagModel.findOne({
+    organization,
+  });
+
+  if (!existing || !existing.tags) {
+    return;
+  }
+
+  const settings = existing.settings || {};
+
+  for (const tagId of tagIds) {
+    if (settings[tagId]) {
+      settings[tagId] = {
+        color,
+        description: settings[tagId].description || "",
+      };
+    }
+  }
+
+  await TagModel.updateOne(
+    { organization },
+    {
+      $set: {
+        settings,
+      },
+    },
+  );
+}
