@@ -4,7 +4,7 @@ import { EventUserForResponseLocals } from "shared/types/events/event-types";
 import { AuthRequest } from "back-end/src/types/AuthRequest";
 import { ApiErrorResponse } from "back-end/types/api";
 import { getContextFromReq } from "back-end/src/services/organizations";
-import { addTag, removeTag } from "back-end/src/models/TagModel";
+import { addTag, removeTag, updateTagsColor } from "back-end/src/models/TagModel";
 import { removeTagInMetrics } from "back-end/src/models/MetricModel";
 import { removeTagInFeature } from "back-end/src/models/FeatureModel";
 import { removeTagFromSlackIntegration } from "back-end/src/models/SlackIntegrationModel";
@@ -99,3 +99,41 @@ export const deleteTag = async (
 };
 
 // endregion DELETE /tag/:id
+
+// region PUT /tag/color
+
+type UpdateTagsColorRequest = AuthRequest<{ tags: string[]; color: string }>;
+
+type UpdateTagsColorResponse = {
+  status: 200;
+};
+
+/**
+ * PUT /tag/color
+ * Update color for multiple tags
+ * @param req
+ * @param res
+ */
+export const putTagColors = async (
+  req: UpdateTagsColorRequest,
+  res: Response<
+    UpdateTagsColorResponse | ApiErrorResponse,
+    EventUserForResponseLocals
+  >,
+) => {
+  const context = getContextFromReq(req);
+
+  if (!context.permissions.canCreateAndUpdateTag()) {
+    context.permissions.throwPermissionError();
+  }
+
+  const { tags, color } = req.body;
+
+  await updateTagsColor(context.org.id, tags, color);
+
+  res.status(200).json({
+    status: 200,
+  });
+};
+
+// endregion PUT /tag/color
