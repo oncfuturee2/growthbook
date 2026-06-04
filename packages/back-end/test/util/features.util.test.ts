@@ -1,4 +1,9 @@
-import { applyEnvironmentInheritance } from "../../src/util/features";
+import {
+  applyEnvironmentInheritance,
+  applyNamespaceToPayload,
+} from "../../src/util/features";
+import { NamespaceValue } from "shared/types/feature";
+import { FeatureDefinitionRule } from "shared/types/sdk";
 
 describe("feature utils", () => {
   describe("applyEnvironmentInheritance", () => {
@@ -276,6 +281,127 @@ describe("feature utils", () => {
         );
         expect(result.staging).toEqual({ enabled: true });
       });
+    });
+  });
+
+  describe("applyNamespaceToPayload", () => {
+    it("uses the org namespace format when nsDefinition explicitly marks multiRange", () => {
+      const rule = {
+        hashAttribute: "userId",
+        filters: [
+          {
+            attribute: "country",
+            seed: "geo-seed",
+            hashVersion: 2,
+            ranges: [[0, 0.2]],
+          },
+        ],
+      } as FeatureDefinitionRule;
+      const namespace = {
+        enabled: true,
+        name: "checkout",
+        range: [0.1, 0.3],
+      } as NamespaceValue;
+      const namespacesMap = new Map([
+        [
+          "checkout",
+          {
+            format: "multiRange" as const,
+            hashAttribute: "deviceId",
+            seed: "checkout-seed",
+          },
+        ],
+      ]);
+
+      applyNamespaceToPayload(rule, namespace, namespacesMap);
+
+      expect(rule.filters).toEqual([
+        {
+          attribute: "country",
+          seed: "geo-seed",
+          hashVersion: 2,
+          ranges: [[0, 0.2]],
+        },
+        {
+          attribute: "deviceId",
+          seed: "checkout-seed",
+          hashVersion: 2,
+          ranges: [[0.1, 0.3]],
+        },
+      ]);
+      expect(rule.namespace).toBeUndefined();
+      expect(rule.hashAttribute).toBe("userId");
+    });
+
+    it("falls back to multiRange structural detection when nsDefinition is missing", () => {
+      const rule = {
+        hashAttribute: "id",
+      } as FeatureDefinitionRule;
+      const namespace = {
+        enabled: true,
+        name: "pricing",
+        format: "multiRange",
+        hashAttribute: "anonymousId",
+        hashVersion: 1,
+        ranges: [
+          [0, 0.25],
+          ["0.5", "0.75"] as unknown as [number, number],
+        ],
+      } as NamespaceValue;
+
+      applyNamespaceToPayload(rule, namespace);
+
+      expect(rule.filters).toEqual([
+        {
+          attribute: "anonymousId",
+          seed: "pricing",
+          hashVersion: 1,
+          ranges: [
+            [0, 0.25],
+            [0.5, 0.75],
+          ],
+        },
+      ]);
+      expect(rule.namespace).toBeUndefined();
+    });
+
+    it("stores legacy namespaces on the rule as a [name, start, end] tuple", () => {
+      const rule = {
+        hashAttribute: "id",
+      } as FeatureDefinitionRule;
+      const namespace = {
+        enabled: true,
+        name: "legacy-rollout",
+        range: [0.2, 0.4],
+      } as NamespaceValue;
+      const namespacesMap = new Map([
+        [
+          "legacy-rollout",
+          {
+            format: "legacy" as const,
+            hashAttribute: "ignored",
+            seed: "ignored",
+          },
+        ],
+      ]);
+
+      applyNamespaceToPayload(rule, namespace, namespacesMap);
+
+      expect(rule.namespace).toEqual(["legacy-rollout", 0.2, 0.4]);
+      expect(rule.filters).toBeUndefined();
+    });
+
+    it("coerces stringified legacy range boundaries into numbers defensively", () => {
+      const rule = {} as FeatureDefinitionRule;
+      const namespace = {
+        enabled: true,
+        name: "legacy-rollout",
+        range: ["0.5", "1"] as unknown as [number, number],
+      } as NamespaceValue;
+
+      applyNamespaceToPayload(rule, namespace);
+
+      expect(rule.namespace).toEqual(["legacy-rollout", 0.5, 1]);
     });
   });
 });
