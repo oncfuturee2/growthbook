@@ -224,8 +224,7 @@ export async function deleteIdea(
     context.permissions.throwPermissionError();
   }
 
-  // note: we might want to change this to change the status to
-  // 'deleted' instead of actually deleting the document.
+  // Note: This now does a soft delete by setting 'deleted' to true
   const del = await deleteIdeaById(idea.id);
 
   res.status(200).json({

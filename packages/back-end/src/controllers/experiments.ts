@@ -756,6 +756,7 @@ export async function getExperiment(
       (await IdeaModel.findOne({
         organization: experiment.organization,
         id: experiment.ideaSource,
+        deleted: { $ne: true },
       })) || undefined;
   }
 

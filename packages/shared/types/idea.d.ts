@@ -7,6 +7,7 @@ export interface IdeaInterface {
   id: string;
   text: string;
   archived: boolean;
+  deleted?: boolean;
   details?: string;
   userId: string | null;
   userName?: string;
