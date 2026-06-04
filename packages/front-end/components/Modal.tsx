@@ -5,23 +5,21 @@ import {
   useState,
   ReactNode,
   CSSProperties,
-  useCallback,
 } from "react";
 import clsx from "clsx";
 import { truncateString } from "shared/util";
 import { v4 as uuidv4 } from "uuid";
-import { Flex, Text } from "@radix-ui/themes";
-import track, { TrackEventProps } from "@/services/track";
-import ConditionalWrapper from "@/components/ConditionalWrapper";
-import ErrorDisplay from "@/ui/ErrorDisplay";
-import Button from "@/ui/Button";
+import { TrackEventProps } from "@/services/track";
 import LoadingOverlay from "./LoadingOverlay";
 import Portal from "./Modal/Portal";
-import Tooltip from "./Tooltip/Tooltip";
-import { DocLink, DocSection } from "./DocLink";
-import styles from "./Modal.module.scss";
+import { DocSection } from "./DocLink";
+import { useModalTracking } from "./Modal/useModalTracking";
+import { useModalEvents } from "./Modal/useModalEvents";
+import { ModalHeader } from "./Modal/ModalHeader";
+import { ModalBody } from "./Modal/ModalBody";
+import { ModalFooter } from "./Modal/ModalFooter";
 
-type ModalProps = {
+export type ModalProps = {
   header?: "logo" | string | ReactNode | boolean;
   subHeader?: string | ReactNode;
   showHeaderCloseButton?: boolean;
@@ -78,6 +76,7 @@ type ModalProps = {
   // Enables closing the modal via backdrop click and Escape key.
   dismissible?: boolean;
 };
+
 const Modal: FC<ModalProps> = ({
   header = "logo",
   subHeader = "",
@@ -153,28 +152,29 @@ const Modal: FC<ModalProps> = ({
   useEffect(() => {
     setError(externalError || null);
     externalError && scrollToTop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalError]);
 
   useEffect(() => {
     setLoading(externalLoading || false);
   }, [externalLoading]);
 
-  useEffect(() => {
-    setTimeout(() => {
-      if (!autoFocusSelector) return;
-      if (open && bodyRef.current) {
-        const input = bodyRef.current.querySelector<
-          HTMLInputElement | HTMLTextAreaElement
-        >(autoFocusSelector);
-        if (input) {
-          input.focus();
-          if (input.select) {
-            input.select();
-          }
-        }
-      }
-    }, 70);
-  }, [open, autoFocusSelector]);
+  useModalEvents({
+    open,
+    dismissible,
+    close,
+    autoFocusSelector,
+    bodyRef,
+    modalRef,
+  });
+
+  const { sendTrackingEvent } = useModalTracking({
+    trackingEventModalType,
+    trackingEventModalSource,
+    allowlistedTrackingEventProps,
+    modalUuid,
+    open,
+  });
 
   const contents = (
     <div
@@ -191,187 +191,52 @@ const Modal: FC<ModalProps> = ({
       }}
     >
       {loading && <LoadingOverlay />}
-      {header ? (
-        <div
-          className={clsx("modal-header", headerClassName, {
-            [styles["modal-header-backgroundless"]]: backgroundlessHeader,
-          })}
-        >
-          <div>
-            <h4 className="modal-title">
-              {header === "logo" ? (
-                <img
-                  alt="GrowthBook"
-                  src="/logo/growthbook-logo.png"
-                  style={{ height: 40 }}
-                />
-              ) : (
-                header
-              )}
-              {docSection && (
-                <DocLink docSection={docSection}>
-                  <Tooltip body="View Documentation" className="ml-1 w-4 h-4" />
-                </DocLink>
-              )}
-            </h4>
-            {subHeader ? <div className="mt-1">{subHeader}</div> : null}
-          </div>
-          {close && showHeaderCloseButton && (
-            <button
-              type="button"
-              className="close"
-              onClick={(e) => {
-                e.preventDefault();
-                close();
-              }}
-              aria-label="Close"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          )}
-        </div>
-      ) : (
-        <>
-          {close && showHeaderCloseButton && (
-            <Flex justify="end">
-              <button
-                type="button"
-                className="close px-3 py-1"
-                onClick={(e) => {
-                  e.preventDefault();
-                  close();
-                }}
-                aria-label="Close"
-              >
-                <Text aria-hidden="true" size="6">
-                  &times;
-                </Text>
-              </button>
-            </Flex>
-          )}
-        </>
-      )}
-      <div
-        className={`modal-body ${bodyClassName} ${
-          !header && (!close || !showHeaderCloseButton) ? "mt-2" : ""
-        }`}
+      <ModalHeader
+        header={header}
+        subHeader={subHeader}
+        showHeaderCloseButton={showHeaderCloseButton}
+        headerClassName={headerClassName}
+        backgroundlessHeader={backgroundlessHeader}
+        docSection={docSection}
+        close={close}
+      />
+      <ModalBody
         ref={bodyRef}
-        style={{
-          ...(overflowAuto
-            ? {
-                overflowY: "auto",
-                overflowX: "hidden",
-                scrollBehavior: "smooth",
-                marginBottom: stickyFooter ? "100px" : undefined,
-              }
-            : {}),
-          ...(sizeY
-            ? {
-                flex: 1,
-                minHeight: 0,
-                display: "flex",
-                flexDirection: "column",
-              }
-            : {}),
-        }}
+        bodyClassName={bodyClassName}
+        hasHeader={!!header}
+        hasClose={!!close}
+        showHeaderCloseButton={showHeaderCloseButton}
+        overflowAuto={overflowAuto}
+        stickyFooter={stickyFooter}
+        sizeY={sizeY}
+        isSuccess={isSuccess}
+        successMessage={successMessage}
+        aboveBodyContent={aboveBodyContent}
+        error={error}
       >
-        {isSuccess ? (
-          <div className="alert alert-success">{successMessage}</div>
-        ) : (
-          <>
-            {aboveBodyContent}
-            {error && <ErrorDisplay error={error} mb="3" />}
-            {children}
-          </>
-        )}
-      </div>
-      {!hideCta &&
-      (submit ||
-        secondaryCTA ||
-        tertiaryCTA ||
-        backCTA ||
-        (close && includeCloseCta)) ? (
-        <div
-          className={clsx("modal-footer", { "sticky-footer": stickyFooter })}
-        >
-          {backCTA ? (
-            <>
-              {backCTA}
-              <div className="flex-1" />
-            </>
-          ) : null}
-          <ConditionalWrapper
-            condition={stickyFooter}
-            wrapper={
-              <div
-                className="container pagecontents mx-auto text-right"
-                style={{ maxWidth: 1100 }}
-              />
-            }
-          >
-            {close && includeCloseCta ? (
-              <>
-                {useRadixButton ? (
-                  <div className="mr-1">
-                    <Button
-                      variant="ghost"
-                      onClick={async () => {
-                        await onClickCloseCta?.();
-                        close();
-                      }}
-                    >
-                      {isSuccess && successMessage ? "Close" : closeCta}
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className={closeCtaClassName}
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      await onClickCloseCta?.();
-                      close();
-                    }}
-                  >
-                    {isSuccess && successMessage ? "Close" : closeCta}
-                  </button>
-                )}
-              </>
-            ) : null}
-            {secondaryCTA}
-            {submit && !isSuccess ? (
-              <Tooltip
-                body={disabledMessage || ""}
-                shouldDisplay={!ctaEnabled && !!disabledMessage}
-                tipPosition="top"
-                className={fullWidthSubmit ? "w-100" : ""}
-              >
-                {useRadixButton ? (
-                  <Button
-                    type="submit"
-                    disabled={!ctaEnabled}
-                    ml="3"
-                    color={submitColor === "danger" ? "red" : undefined}
-                  >
-                    {cta}
-                  </Button>
-                ) : (
-                  <button
-                    className={`btn btn-${submitColor} ${
-                      fullWidthSubmit ? "w-100" : ""
-                    } ${stickyFooter ? "ml-auto mr-5" : ""}`}
-                    type="submit"
-                    disabled={!ctaEnabled}
-                  >
-                    {cta}
-                  </button>
-                )}
-              </Tooltip>
-            ) : null}
-            {tertiaryCTA}
-          </ConditionalWrapper>
-        </div>
-      ) : null}
+        {children}
+      </ModalBody>
+      <ModalFooter
+        hideCta={hideCta}
+        submit={!!submit}
+        secondaryCTA={secondaryCTA}
+        tertiaryCTA={tertiaryCTA}
+        backCTA={backCTA}
+        close={close}
+        includeCloseCta={includeCloseCta}
+        stickyFooter={stickyFooter}
+        useRadixButton={useRadixButton}
+        onClickCloseCta={onClickCloseCta}
+        isSuccess={isSuccess}
+        successMessage={successMessage}
+        closeCta={closeCta}
+        closeCtaClassName={closeCtaClassName}
+        disabledMessage={disabledMessage}
+        ctaEnabled={ctaEnabled}
+        fullWidthSubmit={fullWidthSubmit}
+        submitColor={submitColor}
+        cta={cta}
+      />
     </div>
   );
 
@@ -384,54 +249,6 @@ const Modal: FC<ModalProps> = ({
   if (increasedElevation) {
     overlayStyle.zIndex = 1500;
   }
-
-  const sendTrackingEvent = useCallback(
-    (eventName: string, additionalProps?: Record<string, unknown>) => {
-      if (trackingEventModalType === "") {
-        return;
-      }
-      track(eventName, {
-        type: trackingEventModalType,
-        source: trackingEventModalSource,
-        eventGroupUuid: modalUuid,
-        ...allowlistedTrackingEventProps,
-        ...(additionalProps || {}),
-      });
-    },
-    [
-      trackingEventModalType,
-      trackingEventModalSource,
-      allowlistedTrackingEventProps,
-      modalUuid,
-    ],
-  );
-
-  useEffect(() => {
-    if (open) {
-      sendTrackingEvent("modal-open");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  useEffect(() => {
-    if (!dismissible || !close || !open) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-
-      const openModals = Array.from(document.querySelectorAll(".modal.show"));
-      const topMostOpenModal = openModals[openModals.length - 1];
-      if (topMostOpenModal !== modalRef.current) return;
-
-      event.preventDefault();
-      close();
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [dismissible, close, open]);
 
   const modalHtml = (
     <div
@@ -491,7 +308,7 @@ const Modal: FC<ModalProps> = ({
                 if (trackOnSubmit) {
                   sendTrackingEvent("modal-submit-success");
                 }
-              } catch (e) {
+              } catch (e: any) {
                 setError(e.message);
                 scrollToTop();
                 setLoading(false);
