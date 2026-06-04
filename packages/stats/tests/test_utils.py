@@ -6,8 +6,9 @@ import numpy as np
 from scipy.stats import norm
 import copy
 
-from gbstats.utils import multinomial_covariance, truncated_normal_mean
+from gbstats.utils import multinomial_covariance, truncated_normal_mean, check_srm
 from scipy.stats import truncnorm
+from scipy.stats.distributions import chi2
 
 DECIMALS = 5
 round_ = partial(np.round, decimals=DECIMALS)
@@ -69,3 +70,89 @@ class TestMultinomial(TestCase):
         v_theoretical = multinomial_covariance(self.nu)
         v_empirical = np.cov(data, rowvar=False, ddof=1)
         self.assertTrue(np.allclose(v_theoretical, v_empirical, atol=1e-3))
+
+
+class TestCheckSrm(TestCase):
+    def test_no_srm_with_equal_split(self):
+        p = check_srm(users=[500, 500], weights=[0.5, 0.5])
+        self.assertAlmostEqual(p, 1.0, places=5)
+
+    def test_srm_detected_with_uneven_split(self):
+        p = check_srm(users=[900, 100], weights=[0.5, 0.5])
+        self.assertLess(p, 1e-10)
+
+    def test_zero_weight_variant_excluded(self):
+        users_with_zero = [500, 500, 0]
+        weights_with_zero = [0.5, 0.5, 0.0]
+        p_with_zero = check_srm(users=users_with_zero, weights=weights_with_zero)
+
+        users_valid = [500, 500]
+        weights_valid = [0.5, 0.5]
+        p_valid = check_srm(users=users_valid, weights=weights_valid)
+
+        self.assertAlmostEqual(p_with_zero, p_valid, places=10)
+
+    def test_negative_weight_variant_excluded(self):
+        users = [500, 500, 0]
+        weights = [0.5, 0.5, -0.1]
+        p = check_srm(users=users, weights=weights)
+
+        total_observed = 1000
+        total_weight = 0.9
+        x = 0
+        for i in range(2):
+            e = weights[i] / total_weight * total_observed
+            x += (users[i] - e) ** 2 / e
+        expected_p = float(chi2.sf(x, 1))
+
+        self.assertAlmostEqual(p, expected_p, places=10)
+
+    def test_multiple_zero_weight_variants(self):
+        users = [300, 300, 300, 0, 0]
+        weights = [1.0 / 3, 1.0 / 3, 1.0 / 3, 0.0, 0.0]
+        p = check_srm(users=users, weights=weights)
+
+        users_valid = [300, 300, 300]
+        weights_valid = [1.0 / 3, 1.0 / 3, 1.0 / 3]
+        p_valid = check_srm(users=users_valid, weights=weights_valid)
+
+        self.assertAlmostEqual(p, p_valid, places=10)
+
+    def test_all_zero_weights_returns_one(self):
+        p = check_srm(users=[100, 200, 300], weights=[0.0, 0.0, 0.0])
+        self.assertEqual(p, 1)
+
+    def test_single_valid_weight_returns_one(self):
+        p = check_srm(users=[100, 200], weights=[1.0, 0.0])
+        self.assertEqual(p, 1)
+
+    def test_zero_total_observed_returns_one(self):
+        p = check_srm(users=[0, 0, 0], weights=[0.5, 0.3, 0.2])
+        self.assertEqual(p, 1)
+
+    def test_srm_with_zero_weight_and_uneven_split(self):
+        users = [900, 100, 50]
+        weights = [0.5, 0.5, 0.0]
+        p = check_srm(users=users, weights=weights)
+
+        x = 0
+        total_observed = 1000
+        total_weight = 1.0
+        for i in range(2):
+            e = weights[i] / total_weight * total_observed
+            x += (users[i] - e) ** 2 / e
+        expected_p = float(chi2.sf(x, 1))
+
+        self.assertAlmostEqual(p, expected_p, places=10)
+
+    def test_degrees_of_freedom_with_zero_weights(self):
+        users = [200, 300, 500, 0]
+        weights = [0.2, 0.3, 0.5, 0.0]
+        p = check_srm(users=users, weights=weights)
+
+        users_valid = [200, 300, 500]
+        weights_valid = [0.2, 0.3, 0.5]
+        p_valid = check_srm(users=users_valid, weights=weights_valid)
+
+        self.assertAlmostEqual(p, p_valid, places=10)
+        self.assertGreater(p, 0.05)

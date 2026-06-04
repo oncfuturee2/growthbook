@@ -68,20 +68,24 @@ def variance_of_ratios(mean_m, var_m, mean_d, var_d, cov_m_d) -> float:
 
 # Run a chi-squared test to make sure the observed traffic split matches the expected one
 def check_srm(users: List[int], weights: List[float]) -> float:
-    # Convert count of users into ratios
     total_observed = sum(users)
     if not total_observed:
         return 1
 
     total_weight = sum(weights)
     x = 0
+    n_valid = 0
     for i, o in enumerate(users):
         if weights[i] <= 0:
             continue
         e = weights[i] / total_weight * total_observed
         x = x + ((o - e) ** 2) / e
+        n_valid += 1
 
-    return chi2.sf(x, len(users) - 1)  # type: ignore
+    if n_valid <= 1:
+        return 1
+
+    return chi2.sf(x, n_valid - 1)  # type: ignore
 
 
 def gaussian_credible_interval(
