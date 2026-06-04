@@ -1,4 +1,6 @@
-import { applyEnvironmentInheritance } from "../../src/util/features";
+import { applyEnvironmentInheritance, applyNamespaceToPayload } from "../../src/util/features";
+import { FeatureDefinitionRule } from "shared/types/sdk";
+import { NamespaceValue } from "shared/util";
 
 describe("feature utils", () => {
   describe("applyEnvironmentInheritance", () => {
@@ -276,6 +278,125 @@ describe("feature utils", () => {
         );
         expect(result.staging).toEqual({ enabled: true });
       });
+    });
+  });
+
+  describe("applyNamespaceToPayload", () => {
+    it("generates correct filters when nsDefinition format is multiRange", () => {
+      const rule: FeatureDefinitionRule = {};
+      const namespace: NamespaceValue = {
+        enabled: true,
+        name: "test-namespace",
+        ranges: [[0, 0.5]],
+        format: "multiRange",
+      };
+      const namespacesMap = new Map([
+        [
+          "test-namespace",
+          {
+            hashAttribute: "customId",
+            seed: "customSeed",
+            format: "multiRange" as const,
+          },
+        ],
+      ]);
+
+      applyNamespaceToPayload(rule, namespace, namespacesMap);
+
+      expect(rule.filters).toEqual([
+        {
+          attribute: "customId",
+          seed: "customSeed",
+          hashVersion: 2,
+          ranges: [[0, 0.5]],
+        },
+      ]);
+      expect(rule.namespace).toBeUndefined();
+    });
+
+    it("falls back to isMultiRangeNamespaceFormat when nsDefinition is missing", () => {
+      const rule: FeatureDefinitionRule = { hashAttribute: "ruleAttr" };
+      const namespace: NamespaceValue = {
+        enabled: true,
+        name: "test-namespace",
+        ranges: [[0.5, 1]],
+        format: "multiRange",
+        hashVersion: 1,
+      };
+
+      applyNamespaceToPayload(rule, namespace);
+
+      expect(rule.filters).toEqual([
+        {
+          attribute: "ruleAttr",
+          seed: "test-namespace",
+          hashVersion: 1,
+          ranges: [[0.5, 1]],
+        },
+      ]);
+      expect(rule.namespace).toBeUndefined();
+    });
+
+    it("sets legacy tuple on rule.namespace when format is legacy", () => {
+      const rule: FeatureDefinitionRule = {};
+      const namespace: NamespaceValue = {
+        enabled: true,
+        name: "legacy-ns",
+        range: [0.1, 0.3],
+        format: "legacy",
+      };
+      const namespacesMap = new Map([
+        [
+          "legacy-ns",
+          {
+            format: "legacy" as const,
+          },
+        ],
+      ]);
+
+      applyNamespaceToPayload(rule, namespace, namespacesMap);
+
+      expect(rule.namespace).toEqual(["legacy-ns", 0.1, 0.3]);
+      expect(rule.filters).toBeUndefined();
+    });
+
+    it("handles defensive numeric conversion for anomalous string range formats", () => {
+      const rule: FeatureDefinitionRule = {};
+      // Simulating the anomalous format that might come from legacy DB records
+      const namespace = {
+        enabled: true,
+        name: "anomalous-ns",
+        range: ["0.2", "0.5"] as any,
+      } as unknown as NamespaceValue;
+
+      applyNamespaceToPayload(rule, namespace);
+
+      // Since it's legacy, it should set rule.namespace with converted numbers
+      expect(rule.namespace).toEqual(["anomalous-ns", 0.2, 0.5]);
+      expect(rule.filters).toBeUndefined();
+    });
+
+    it("handles defensive numeric conversion for anomalous string range formats in multiRange", () => {
+      const rule: FeatureDefinitionRule = {};
+      // Simulating the anomalous format that might come from legacy DB records
+      const namespace = {
+        enabled: true,
+        name: "anomalous-multi-ns",
+        ranges: [["0.2", "0.5"] as any],
+        format: "multiRange",
+      } as unknown as NamespaceValue;
+
+      applyNamespaceToPayload(rule, namespace);
+
+      expect(rule.filters).toEqual([
+        {
+          attribute: "id",
+          seed: "anomalous-multi-ns",
+          hashVersion: 2,
+          ranges: [[0.2, 0.5]],
+        },
+      ]);
+      expect(rule.namespace).toBeUndefined();
     });
   });
 });
