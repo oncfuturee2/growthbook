@@ -1,4 +1,7 @@
-import { applyEnvironmentInheritance } from "../../src/util/features";
+import {
+  applyEnvironmentInheritance,
+  applyNamespaceToPayload,
+} from "../../src/util/features";
 
 describe("feature utils", () => {
   describe("applyEnvironmentInheritance", () => {
@@ -275,6 +278,382 @@ describe("feature utils", () => {
           { production: { enabled: true } },
         );
         expect(result.staging).toEqual({ enabled: true });
+      });
+    });
+  });
+
+  describe("applyNamespaceToPayload", () => {
+    describe("multiRange format with explicit nsDefinition format", () => {
+      it("generates filters array with attribute, seed, hashVersion, and ranges when nsDefinition format is multiRange", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "ns-multi",
+          ranges: [[0, 0.3], [0.5, 0.8]] as [number, number][],
+          hashVersion: 2,
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          [
+            "ns-multi",
+            {
+              hashAttribute: "org_hash_attr",
+              seed: "custom-seed",
+              format: "multiRange" as const,
+            },
+          ],
+        ]);
+
+        applyNamespaceToPayload(
+          rule as never,
+          namespace as never,
+          namespacesMap as never,
+        );
+
+        expect(rule.filters).toBeDefined();
+        expect(Array.isArray(rule.filters)).toBe(true);
+        expect(rule.filters).toHaveLength(1);
+        expect(rule.filters[0]).toEqual({
+          attribute: "org_hash_attr",
+          seed: "custom-seed",
+          hashVersion: 2,
+          ranges: [[0, 0.3], [0.5, 0.8]],
+        });
+        expect(rule.namespace).toBeUndefined();
+      });
+
+      it("uses namespace.name as seed when nsDefinition has no seed", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "my-namespace",
+          ranges: [[0.1, 0.5]] as [number, number][],
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          ["my-namespace", { format: "multiRange" as const }],
+        ]);
+
+        applyNamespaceToPayload(
+          rule as never,
+          namespace as never,
+          namespacesMap as never,
+        );
+
+        expect(rule.filters[0].seed).toBe("my-namespace");
+      });
+
+      it("uses rule.hashAttribute as fallback when nsDefinition has no hashAttribute", () => {
+        const rule: Record<string, unknown> = { hashAttribute: "rule_attr" };
+        const namespace = {
+          enabled: true,
+          name: "ns-no-hash",
+          ranges: [[0, 1]] as [number, number][],
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          ["ns-no-hash", { format: "multiRange" as const }],
+        ]);
+
+        applyNamespaceToPayload(
+          rule as never,
+          namespace as never,
+          namespacesMap as never,
+        );
+
+        expect(rule.filters[0].attribute).toBe("rule_attr");
+      });
+
+      it("defaults hashAttribute to 'id' when neither nsDefinition nor rule provides one", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "ns-default",
+          ranges: [[0, 0.5]] as [number, number][],
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          ["ns-default", { format: "multiRange" as const }],
+        ]);
+
+        applyNamespaceToPayload(
+          rule as never,
+          namespace as never,
+          namespacesMap as never,
+        );
+
+        expect(rule.filters[0].attribute).toBe("id");
+      });
+
+      it("defaults hashVersion to 2 when namespace has no hashVersion", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "ns-no-ver",
+          ranges: [[0, 1]] as [number, number][],
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          ["ns-no-ver", { format: "multiRange" as const }],
+        ]);
+
+        applyNamespaceToPayload(
+          rule as never,
+          namespace as never,
+          namespacesMap as never,
+        );
+
+        expect(rule.filters[0].hashVersion).toBe(2);
+      });
+
+      it("preserves existing filters and appends new one", () => {
+        const rule: Record<string, unknown> = {
+          filters: [{ attribute: "existing", seed: "old", hashVersion: 1, ranges: [[0, 1]] }],
+        };
+        const namespace = {
+          enabled: true,
+          name: "ns-append",
+          ranges: [[0.2, 0.6]] as [number, number][],
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          ["ns-append", { format: "multiRange" as const }],
+        ]);
+
+        applyNamespaceToPayload(
+          rule as never,
+          namespace as never,
+          namespacesMap as never,
+        );
+
+        expect(rule.filters).toHaveLength(2);
+        expect(rule.filters[0].attribute).toBe("existing");
+        expect(rule.filters[1].attribute).toBe("id");
+      });
+
+      it("uses hashVersion from namespace when present", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "ns-hv",
+          ranges: [[0, 1]] as [number, number][],
+          hashVersion: 3,
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          ["ns-hv", { format: "multiRange" as const }],
+        ]);
+
+        applyNamespaceToPayload(
+          rule as never,
+          namespace as never,
+          namespacesMap as never,
+        );
+
+        expect(rule.filters[0].hashVersion).toBe(3);
+      });
+    });
+
+    describe("multiRange format fallback via isMultiRangeNamespaceFormat", () => {
+      it("detects multiRange structurally when nsDefinition is missing", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "ns-structural",
+          ranges: [[0.1, 0.4], [0.6, 0.9]] as [number, number][],
+          hashAttribute: "device_id",
+          hashVersion: 2,
+          format: "multiRange" as const,
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.filters).toBeDefined();
+        expect(rule.filters).toHaveLength(1);
+        expect(rule.filters[0]).toEqual({
+          attribute: "device_id",
+          seed: "ns-structural",
+          hashVersion: 2,
+          ranges: [[0.1, 0.4], [0.6, 0.9]],
+        });
+        expect(rule.namespace).toBeUndefined();
+      });
+
+      it("uses namespace hashAttribute when nsDefinition is absent", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "ns-no-def",
+          ranges: [[0, 0.5]] as [number, number][],
+          hashAttribute: "explicit_hash_attr",
+          format: "multiRange" as const,
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.filters[0].attribute).toBe("explicit_hash_attr");
+      });
+
+      it("falls back to rule.hashAttribute when namespace has no hashAttribute and no nsDefinition", () => {
+        const rule: Record<string, unknown> = { hashAttribute: "fallback_attr" };
+        const namespace = {
+          enabled: true,
+          name: "ns-no-hash-attr",
+          ranges: [[0, 1]] as [number, number][],
+          format: "multiRange" as const,
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.filters[0].attribute).toBe("fallback_attr");
+      });
+    });
+
+    describe("legacy format", () => {
+      it("sets traditional [name, start, end] tuple on rule.namespace", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "legacy-ns",
+          range: [0.2, 0.7] as [number, number],
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.namespace).toEqual(["legacy-ns", 0.2, 0.7]);
+        expect(rule.filters).toBeUndefined();
+      });
+
+      it("uses nsDefinition format=legacy to force legacy path even with ranges field", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "forced-legacy",
+          ranges: [[0.1, 0.5]] as [number, number][],
+          format: "multiRange" as const,
+        };
+        const namespacesMap = new Map([
+          [
+            "forced-legacy",
+            {
+              format: "legacy" as const,
+            },
+          ],
+        ]);
+
+        applyNamespaceToPayload(
+          rule as never,
+          namespace as never,
+          namespacesMap as never,
+        );
+
+        expect(rule.namespace).toEqual(["forced-legacy", 0.1, 0.5]);
+        expect(rule.filters).toBeUndefined();
+      });
+
+      it("handles legacy namespace with empty range", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "empty-range-ns",
+          range: [0, 0] as [number, number],
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.namespace).toEqual(["empty-range-ns", 0, 0]);
+      });
+
+      it("handles legacy namespace with no range field", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "no-range-ns",
+        } as Record<string, unknown>;
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.namespace).toEqual(["no-range-ns", 0, 0]);
+      });
+    });
+
+    describe("defensive number conversion for string range values", () => {
+      it("converts string range values like '0.5' to numbers", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "string-range-ns",
+          range: ["0.1", "0.5"] as unknown as [number, number],
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.namespace).toEqual(["string-range-ns", 0.1, 0.5]);
+      });
+
+      it("converts string range values in multiRange format", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "string-multi-ns",
+          ranges: [["0", "0.3"], ["0.5", "0.8"]] as unknown as [number, number][],
+          hashAttribute: "id",
+          format: "multiRange" as const,
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.filters[0].ranges).toEqual([
+          [0, 0.3],
+          [0.5, 0.8],
+        ]);
+      });
+
+      it("falls back to 0 for non-numeric string values", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "bad-string-ns",
+          range: ["abc", "xyz"] as unknown as [number, number],
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.namespace).toEqual(["bad-string-ns", 0, 0]);
+      });
+
+      it("handles mixed valid and invalid string values", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "mixed-ns",
+          range: ["0.3", "invalid"] as unknown as [number, number],
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.namespace).toEqual(["mixed-ns", 0.3, 0]);
+      });
+
+      it("handles string numbers in multiRange ranges array", () => {
+        const rule: Record<string, unknown> = {};
+        const namespace = {
+          enabled: true,
+          name: "mixed-multi-ns",
+          ranges: [
+            ["0.2", "0.4"],
+            ["bad", "0.9"],
+          ] as unknown as [number, number][],
+          hashAttribute: "id",
+          format: "multiRange" as const,
+        };
+
+        applyNamespaceToPayload(rule as never, namespace as never);
+
+        expect(rule.filters[0].ranges).toEqual([
+          [0.2, 0.4],
+          [0, 0.9],
+        ]);
       });
     });
   });
