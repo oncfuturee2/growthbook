@@ -5,6 +5,10 @@ const ideaSchema = new mongoose.Schema({
   id: String,
   text: String,
   archived: Boolean,
+  deleted: {
+    type: Boolean,
+    default: false,
+  },
   details: String,
   userId: String,
   userName: String,
@@ -32,6 +36,15 @@ const ideaSchema = new mongoose.Schema({
     userAdjustment: Number,
   },
 });
+
+ideaSchema.pre(/^find/, function () {
+  const query = this.getFilter();
+
+  if (typeof query.deleted === "undefined") {
+    this.where({ deleted: { $ne: true } });
+  }
+});
+
 export type IdeaDocument = mongoose.Document & IdeaInterface;
 
 export const IdeaModel = mongoose.model<IdeaInterface>("Idea", ideaSchema);

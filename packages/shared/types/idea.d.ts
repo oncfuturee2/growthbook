@@ -1,12 +1,12 @@
 import { Vote } from "shared/types/vote";
 
-// Where the idea was submitted from
 export type IdeaSource = "web" | "slack";
 
 export interface IdeaInterface {
   id: string;
   text: string;
   archived: boolean;
+  deleted?: boolean;
   details?: string;
   userId: string | null;
   userName?: string;
