@@ -1,83 +1,15 @@
-import {
-  FC,
-  useRef,
-  useEffect,
-  useState,
-  ReactNode,
-  CSSProperties,
-  useCallback,
-} from "react";
+import { CSSProperties, FC, useRef } from "react";
 import clsx from "clsx";
-import { truncateString } from "shared/util";
-import { v4 as uuidv4 } from "uuid";
-import { Flex, Text } from "@radix-ui/themes";
-import track, { TrackEventProps } from "@/services/track";
-import ConditionalWrapper from "@/components/ConditionalWrapper";
-import ErrorDisplay from "@/ui/ErrorDisplay";
-import Button from "@/ui/Button";
 import LoadingOverlay from "./LoadingOverlay";
+import ModalBody from "./Modal/ModalBody";
+import ModalFooter from "./Modal/ModalFooter";
+import ModalHeader from "./Modal/ModalHeader";
 import Portal from "./Modal/Portal";
-import Tooltip from "./Tooltip/Tooltip";
-import { DocLink, DocSection } from "./DocLink";
-import styles from "./Modal.module.scss";
+import { ModalProps } from "./Modal/shared";
+import useModalDismiss from "./Modal/useModalDismiss";
+import useModalState from "./Modal/useModalState";
+import useModalTracking from "./Modal/useModalTracking";
 
-type ModalProps = {
-  header?: "logo" | string | ReactNode | boolean;
-  subHeader?: string | ReactNode;
-  showHeaderCloseButton?: boolean;
-  open: boolean;
-  hideCta?: boolean;
-  // An empty string will prevent firing a tracking event, but the prop is still required to encourage developers to add tracking
-  trackingEventModalType: string;
-  // The source (likely page or component) causing the modal to be shown
-  trackingEventModalSource?: string;
-  // Currently the allowlist for what event props are valid is controlled outside of the codebase.
-  // Make sure you've checked that any props you pass here are in the list!
-  allowlistedTrackingEventProps?: TrackEventProps;
-  modalUuid?: string;
-  trackOnSubmit?: boolean;
-  className?: string;
-  submitColor?: string;
-  cta?: string | ReactNode;
-  ctaEnabled?: boolean;
-  closeCta?: string | ReactNode;
-  includeCloseCta?: boolean;
-  onClickCloseCta?: () => Promise<void> | void;
-  closeCtaClassName?: string;
-  disabledMessage?: string;
-  docSection?: DocSection;
-  error?: string;
-  loading?: boolean;
-  size?: "md" | "lg" | "max" | "fill";
-  sizeY?: "max" | "fill";
-  inline?: boolean;
-  overflowAuto?: boolean;
-  autoFocusSelector?: string;
-  autoCloseOnSubmit?: boolean;
-  solidOverlay?: boolean;
-  close?: () => void;
-  submit?: () => void | Promise<void>;
-  fullWidthSubmit?: boolean;
-  secondaryCTA?: ReactNode;
-  tertiaryCTA?: ReactNode;
-  backCTA?: ReactNode;
-  successMessage?: string;
-  children: ReactNode;
-  bodyClassName?: string;
-  headerClassName?: string;
-  formRef?: React.RefObject<HTMLFormElement>;
-  customValidation?: () => Promise<boolean> | boolean;
-  increasedElevation?: boolean;
-  stickyFooter?: boolean;
-  aboveBodyContent?: ReactNode;
-  useRadixButton?: boolean;
-  borderlessHeader?: boolean;
-  backgroundlessHeader?: boolean;
-  borderlessFooter?: boolean;
-  onBackdropClick?: () => void;
-  // Enables closing the modal via backdrop click and Escape key.
-  dismissible?: boolean;
-};
 const Modal: FC<ModalProps> = ({
   header = "logo",
   subHeader = "",
@@ -97,7 +29,7 @@ const Modal: FC<ModalProps> = ({
   includeCloseCta = true,
   disabledMessage,
   inline = false,
-  size = "md",
+  size: initialSize = "md",
   sizeY,
   docSection,
   className = "",
@@ -120,7 +52,7 @@ const Modal: FC<ModalProps> = ({
   trackingEventModalType,
   trackingEventModalSource,
   allowlistedTrackingEventProps = {},
-  modalUuid: _modalUuid,
+  modalUuid,
   trackOnSubmit = true,
   useRadixButton,
   aboveBodyContent = null,
@@ -130,51 +62,40 @@ const Modal: FC<ModalProps> = ({
   onBackdropClick,
   dismissible = false,
 }) => {
-  const [modalUuid] = useState(_modalUuid || uuidv4());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isSuccess, setIsSuccess] = useState(false);
-
+  const size = inline ? "fill" : initialSize;
   const bodyRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  const scrollToTop = () => {
-    setTimeout(() => {
-      if (bodyRef.current) {
-        bodyRef.current.scrollTo({ top: 0, behavior: "smooth" });
-      }
-    }, 50);
-  };
+  const sendTrackingEvent = useModalTracking({
+    allowlistedTrackingEventProps,
+    modalUuid,
+    open,
+    trackingEventModalSource,
+    trackingEventModalType,
+  });
 
-  if (inline) {
-    size = "fill";
-  }
+  const { error, handleSubmit, isSuccess, loading } = useModalState({
+    autoCloseOnSubmit,
+    autoFocusSelector,
+    bodyRef,
+    close,
+    customValidation,
+    externalError,
+    externalLoading,
+    open,
+    sendTrackingEvent,
+    submit,
+    successMessage,
+    trackOnSubmit,
+  });
 
-  useEffect(() => {
-    setError(externalError || null);
-    externalError && scrollToTop();
-  }, [externalError]);
-
-  useEffect(() => {
-    setLoading(externalLoading || false);
-  }, [externalLoading]);
-
-  useEffect(() => {
-    setTimeout(() => {
-      if (!autoFocusSelector) return;
-      if (open && bodyRef.current) {
-        const input = bodyRef.current.querySelector<
-          HTMLInputElement | HTMLTextAreaElement
-        >(autoFocusSelector);
-        if (input) {
-          input.focus();
-          if (input.select) {
-            input.select();
-          }
-        }
-      }
-    }, 70);
-  }, [open, autoFocusSelector]);
+  const handleModalClick = useModalDismiss({
+    close,
+    dismissible,
+    modalRef,
+    onBackdropClick,
+    open,
+  });
 
   const contents = (
     <div
@@ -191,247 +112,63 @@ const Modal: FC<ModalProps> = ({
       }}
     >
       {loading && <LoadingOverlay />}
-      {header ? (
-        <div
-          className={clsx("modal-header", headerClassName, {
-            [styles["modal-header-backgroundless"]]: backgroundlessHeader,
-          })}
-        >
-          <div>
-            <h4 className="modal-title">
-              {header === "logo" ? (
-                <img
-                  alt="GrowthBook"
-                  src="/logo/growthbook-logo.png"
-                  style={{ height: 40 }}
-                />
-              ) : (
-                header
-              )}
-              {docSection && (
-                <DocLink docSection={docSection}>
-                  <Tooltip body="View Documentation" className="ml-1 w-4 h-4" />
-                </DocLink>
-              )}
-            </h4>
-            {subHeader ? <div className="mt-1">{subHeader}</div> : null}
-          </div>
-          {close && showHeaderCloseButton && (
-            <button
-              type="button"
-              className="close"
-              onClick={(e) => {
-                e.preventDefault();
-                close();
-              }}
-              aria-label="Close"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          )}
-        </div>
-      ) : (
-        <>
-          {close && showHeaderCloseButton && (
-            <Flex justify="end">
-              <button
-                type="button"
-                className="close px-3 py-1"
-                onClick={(e) => {
-                  e.preventDefault();
-                  close();
-                }}
-                aria-label="Close"
-              >
-                <Text aria-hidden="true" size="6">
-                  &times;
-                </Text>
-              </button>
-            </Flex>
-          )}
-        </>
-      )}
-      <div
-        className={`modal-body ${bodyClassName} ${
-          !header && (!close || !showHeaderCloseButton) ? "mt-2" : ""
-        }`}
-        ref={bodyRef}
-        style={{
-          ...(overflowAuto
-            ? {
-                overflowY: "auto",
-                overflowX: "hidden",
-                scrollBehavior: "smooth",
-                marginBottom: stickyFooter ? "100px" : undefined,
-              }
-            : {}),
-          ...(sizeY
-            ? {
-                flex: 1,
-                minHeight: 0,
-                display: "flex",
-                flexDirection: "column",
-              }
-            : {}),
-        }}
-      >
-        {isSuccess ? (
-          <div className="alert alert-success">{successMessage}</div>
-        ) : (
-          <>
-            {aboveBodyContent}
-            {error && <ErrorDisplay error={error} mb="3" />}
-            {children}
-          </>
-        )}
-      </div>
-      {!hideCta &&
-      (submit ||
-        secondaryCTA ||
-        tertiaryCTA ||
-        backCTA ||
-        (close && includeCloseCta)) ? (
-        <div
-          className={clsx("modal-footer", { "sticky-footer": stickyFooter })}
-        >
-          {backCTA ? (
-            <>
-              {backCTA}
-              <div className="flex-1" />
-            </>
-          ) : null}
-          <ConditionalWrapper
-            condition={stickyFooter}
-            wrapper={
-              <div
-                className="container pagecontents mx-auto text-right"
-                style={{ maxWidth: 1100 }}
-              />
-            }
-          >
-            {close && includeCloseCta ? (
-              <>
-                {useRadixButton ? (
-                  <div className="mr-1">
-                    <Button
-                      variant="ghost"
-                      onClick={async () => {
-                        await onClickCloseCta?.();
-                        close();
-                      }}
-                    >
-                      {isSuccess && successMessage ? "Close" : closeCta}
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className={closeCtaClassName}
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      await onClickCloseCta?.();
-                      close();
-                    }}
-                  >
-                    {isSuccess && successMessage ? "Close" : closeCta}
-                  </button>
-                )}
-              </>
-            ) : null}
-            {secondaryCTA}
-            {submit && !isSuccess ? (
-              <Tooltip
-                body={disabledMessage || ""}
-                shouldDisplay={!ctaEnabled && !!disabledMessage}
-                tipPosition="top"
-                className={fullWidthSubmit ? "w-100" : ""}
-              >
-                {useRadixButton ? (
-                  <Button
-                    type="submit"
-                    disabled={!ctaEnabled}
-                    ml="3"
-                    color={submitColor === "danger" ? "red" : undefined}
-                  >
-                    {cta}
-                  </Button>
-                ) : (
-                  <button
-                    className={`btn btn-${submitColor} ${
-                      fullWidthSubmit ? "w-100" : ""
-                    } ${stickyFooter ? "ml-auto mr-5" : ""}`}
-                    type="submit"
-                    disabled={!ctaEnabled}
-                  >
-                    {cta}
-                  </button>
-                )}
-              </Tooltip>
-            ) : null}
-            {tertiaryCTA}
-          </ConditionalWrapper>
-        </div>
-      ) : null}
+      <ModalHeader
+        header={header}
+        subHeader={subHeader}
+        showHeaderCloseButton={showHeaderCloseButton}
+        close={close}
+        docSection={docSection}
+        headerClassName={headerClassName}
+        backgroundlessHeader={backgroundlessHeader}
+      />
+      <ModalBody
+        header={header}
+        close={close}
+        showHeaderCloseButton={showHeaderCloseButton}
+        bodyClassName={bodyClassName}
+        bodyRef={bodyRef}
+        overflowAuto={overflowAuto}
+        stickyFooter={stickyFooter}
+        sizeY={sizeY}
+        aboveBodyContent={isSuccess ? null : aboveBodyContent}
+        error={isSuccess ? null : error}
+        bodyContent={
+          isSuccess ? (
+            <div className="alert alert-success">{successMessage}</div>
+          ) : (
+            children
+          )
+        }
+      />
+      <ModalFooter
+        hideCta={hideCta}
+        submit={submit}
+        secondaryCTA={secondaryCTA}
+        tertiaryCTA={tertiaryCTA}
+        backCTA={backCTA}
+        close={close}
+        includeCloseCta={includeCloseCta}
+        stickyFooter={stickyFooter}
+        useRadixButton={useRadixButton}
+        onClickCloseCta={onClickCloseCta}
+        closeCtaClassName={closeCtaClassName}
+        isSuccess={isSuccess}
+        successMessage={successMessage}
+        closeCta={closeCta}
+        disabledMessage={disabledMessage}
+        ctaEnabled={ctaEnabled}
+        fullWidthSubmit={fullWidthSubmit}
+        submitColor={submitColor}
+        cta={cta}
+      />
     </div>
   );
 
-  const overlayStyle: CSSProperties = solidOverlay
-    ? {
-        opacity: 1,
-      }
-    : {};
+  const overlayStyle: CSSProperties = solidOverlay ? { opacity: 1 } : {};
 
   if (increasedElevation) {
     overlayStyle.zIndex = 1500;
   }
-
-  const sendTrackingEvent = useCallback(
-    (eventName: string, additionalProps?: Record<string, unknown>) => {
-      if (trackingEventModalType === "") {
-        return;
-      }
-      track(eventName, {
-        type: trackingEventModalType,
-        source: trackingEventModalSource,
-        eventGroupUuid: modalUuid,
-        ...allowlistedTrackingEventProps,
-        ...(additionalProps || {}),
-      });
-    },
-    [
-      trackingEventModalType,
-      trackingEventModalSource,
-      allowlistedTrackingEventProps,
-      modalUuid,
-    ],
-  );
-
-  useEffect(() => {
-    if (open) {
-      sendTrackingEvent("modal-open");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  useEffect(() => {
-    if (!dismissible || !close || !open) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-
-      const openModals = Array.from(document.querySelectorAll(".modal.show"));
-      const topMostOpenModal = openModals[openModals.length - 1];
-      if (topMostOpenModal !== modalRef.current) return;
-
-      event.preventDefault();
-      close();
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [dismissible, close, open]);
 
   const modalHtml = (
     <div
@@ -442,16 +179,7 @@ const Modal: FC<ModalProps> = ({
         position: inline ? "relative" : undefined,
         zIndex: inline ? 1 : increasedElevation ? 1550 : undefined,
       }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          if (onBackdropClick) {
-            onBackdropClick();
-          } else if (dismissible && close) {
-            close();
-          }
-        }
-        e.stopPropagation();
-      }}
+      onClick={handleModalClick}
     >
       <div
         className={`modal-dialog modal-${size}`}
@@ -464,45 +192,7 @@ const Modal: FC<ModalProps> = ({
         }
       >
         {submit && !isSuccess ? (
-          <form
-            ref={formRef}
-            onSubmit={async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (loading) return;
-              setError(null);
-              setLoading(true);
-              if (customValidation) {
-                const resp = await customValidation();
-                if (resp === false) {
-                  setLoading(false);
-                  return;
-                }
-              }
-              try {
-                await submit();
-
-                setLoading(false);
-                if (successMessage) {
-                  setIsSuccess(true);
-                } else if (close && autoCloseOnSubmit) {
-                  close();
-                }
-                if (trackOnSubmit) {
-                  sendTrackingEvent("modal-submit-success");
-                }
-              } catch (e) {
-                setError(e.message);
-                scrollToTop();
-                setLoading(false);
-                if (trackOnSubmit) {
-                  sendTrackingEvent("modal-submit-error", {
-                    error: truncateString(e.message, 32),
-                  });
-                }
-              }
-            }}
-          >
+          <form ref={formRef} onSubmit={handleSubmit}>
             {contents}
           </form>
         ) : (

@@ -1,0 +1,61 @@
+import { ReactNode, RefObject } from "react";
+import { TrackEventProps } from "@/services/track";
+import { DocSection } from "../DocLink";
+
+export type ModalProps = {
+  header?: "logo" | string | ReactNode | boolean;
+  subHeader?: string | ReactNode;
+  showHeaderCloseButton?: boolean;
+  open: boolean;
+  hideCta?: boolean;
+  trackingEventModalType: string;
+  trackingEventModalSource?: string;
+  allowlistedTrackingEventProps?: TrackEventProps;
+  modalUuid?: string;
+  trackOnSubmit?: boolean;
+  className?: string;
+  submitColor?: string;
+  cta?: string | ReactNode;
+  ctaEnabled?: boolean;
+  closeCta?: string | ReactNode;
+  includeCloseCta?: boolean;
+  onClickCloseCta?: () => Promise<void> | void;
+  closeCtaClassName?: string;
+  disabledMessage?: string;
+  docSection?: DocSection;
+  error?: string;
+  loading?: boolean;
+  size?: "md" | "lg" | "max" | "fill";
+  sizeY?: "max" | "fill";
+  inline?: boolean;
+  overflowAuto?: boolean;
+  autoFocusSelector?: string;
+  autoCloseOnSubmit?: boolean;
+  solidOverlay?: boolean;
+  close?: () => void;
+  submit?: () => void | Promise<void>;
+  fullWidthSubmit?: boolean;
+  secondaryCTA?: ReactNode;
+  tertiaryCTA?: ReactNode;
+  backCTA?: ReactNode;
+  successMessage?: string;
+  children: ReactNode;
+  bodyClassName?: string;
+  headerClassName?: string;
+  formRef?: RefObject<HTMLFormElement>;
+  customValidation?: () => Promise<boolean> | boolean;
+  increasedElevation?: boolean;
+  stickyFooter?: boolean;
+  aboveBodyContent?: ReactNode;
+  useRadixButton?: boolean;
+  borderlessHeader?: boolean;
+  backgroundlessHeader?: boolean;
+  borderlessFooter?: boolean;
+  onBackdropClick?: () => void;
+  dismissible?: boolean;
+};
+
+export type SendTrackingEvent = (
+  eventName: string,
+  additionalProps?: Record<string, unknown>,
+) => void;
